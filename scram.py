@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import base64
 import binascii
 import hashlib
@@ -5,12 +6,26 @@ import hmac
 import os
 import random
 import socket
-import strprep
+import stringprep
 import ssl
 import sys
 import time
-import pyn
 import struct
+import unicodedata
+
+# Could be used to initialize a socket.
+def Initialize(host, port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    connection = ssl.wrap_socket(sock, ssl_version=ssl.PROTOCOL_TLSv1)
+
+    try:
+        connection.connect((host, port))
+    except socket.error:
+        print "Error connecting host: {} at port: {}".format(host, port)
+        sys.exit()
+
+    return connection
 
 def Authenticate(connection, username, password):
     print "Scram Authenticate called.."
@@ -28,8 +43,8 @@ def Authenticate(connection, username, password):
     state = {}
 
     # Normalize username and password.
-    prep_username = strprep.nameprep(username)
-    prep_password = strprep.nameprep(password)
+    prep_username = nameprep(username)
+    prep_password = nameprep(password)
 
     state["username"] = prep_username
     state["password"] = prep_password
@@ -270,27 +285,34 @@ def exor(a, b):
 
     return str(buffer_)
 
-# Receive message over the connection and return the response string.
-def receivePdu(connection, timeout=1.0):
-    # Set timeout for the connection temporarily when receiving messages.
-    # connection.settimeout(timeout)
-    # Initialize the response to empty string.
-    response = ''
-    cont = True
+def nameprep(label):
+    label = u''.join(label)
 
-    i = 0
-    length = ''
-    while i < 4:
-        length_ = connection.recv(1)
-        length += length_
-        i += len(length_)
-    print "Length data length: {}, length: {}".format(len(length), length)
-    length = struct.unpack(">I", length)[0]
-    i = 0
-    data = ''
-    while i < length:
-        data_ = connection.recv(1)
-        data += data_
-        i += len(data_)
+    newlabel = []
+    for c in label:
+        if stringprep.in_table_b1(c):
+            continue
+        newlabel.append(stringprep.map_table_b2(c))
+    label = u"".join(newlabel)
 
-    return data
+    label = unicodedata.normalize("NFKC", label)
+    for c in label:
+        if stringprep.in_table_c12(c) or \
+           stringprep.in_table_c22(c) or \
+           stringprep.in_table_c3(c) or \
+           stringprep.in_table_c4(c) or \
+           stringprep.in_table_c5(c) or \
+           stringprep.in_table_c6(c) or \
+           stringprep.in_table_c7(c) or \
+           stringprep.in_table_c8(c) or \
+           stringprep.in_table_c9(c):
+            raise UnicodeError("Invalid character %r" % c)
+
+    RandAL = map(stringprep.in_table_d1, label)
+    for c in RandAL:
+        if c:
+            if filter(stringprep.in_table_d2, label):
+                raise UnicodeError("Violation of BIDI requirement 2")
+            if not RandAL[0] or not RandAL[-1]:
+                raise UnicodeError("Violation of BIDI requirement 3")
+    return label
