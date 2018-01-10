@@ -27,6 +27,15 @@ def Initialize(host, port):
 
     return connection
 
+def Disconnect(connection):
+    try:
+        connection.close()
+    except:
+        'Connection cannot be closed'
+        return False
+    print 'Connection closed'
+    return True
+
 def Authenticate(connection, username, password):
     print "Scram Authenticate called.."
 
